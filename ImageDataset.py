@@ -22,8 +22,8 @@ class ImageDataset:
         self.target_img_size = target_img_size
 
         self.data_dir = pathlib.Path(datadir)
-        image_count = len(list(self.data_dir.glob('*/*.jpg')))
-        print('Total images in Dataset: ',image_count)
+        self.image_count = len(list(self.data_dir.glob('*/*.jpg')))
+        print('Total images in Dataset: ',self.image_count)
 
         self.CLASS_NAMES = np.array([item.name for item in self.data_dir.glob('*') if item.is_dir() == True])
         print(self.CLASS_NAMES)
@@ -43,3 +43,7 @@ class ImageDataset:
 
     def next(self):
         return next(self.image_generator)
+    
+    def __str__(self):
+        print("\n{:>20} : {}\n{:>20} : {}\n{:>20} : {}\n".format('Total Images',self.image_count,'Number of Classes',len(self.CLASS_NAMES),'Class Names',self.CLASS_NAMES))
+        return " " 
