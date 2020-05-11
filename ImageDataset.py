@@ -12,19 +12,23 @@ import os
 import pathlib
 import numpy as np
 import tensorflow as tf
-
+import time
 
 
 class ImageDataset:
     __author__ = 'Milan Zinzuvadiya'
 
-    def __init__(self,datadir,batch_size=32,target_img_size=(224,224),Type = 'tensorflow',cache=True,buffer_size=1000):
-        self.batch_size = batch_size
+    def __init__(self,datadir,batch_size=0,target_img_size=(224,224),Type = 'tensorflow',cache=True,buffer_size=1000):
         self.target_img_size = target_img_size
 
         self.data_dir = pathlib.Path(datadir)
         self.image_count = len(list(self.data_dir.glob('*/*.jpg')))
         print('Total images in Dataset: ',self.image_count)
+
+        if batch_size == 0:
+            self.batch_size = self.image_count
+        else:
+            self.batch_size = batch_size 
 
         self.CLASS_NAMES = np.array([item.name for item in self.data_dir.glob('*') if item.is_dir() == True])
         print(self.CLASS_NAMES)
@@ -33,32 +37,28 @@ class ImageDataset:
             self.kerasGenerate()
         else:
             self.tensorflowGenerate(cache,buffer_size)
+    
 
-    # Generate Image Dataset 
-    # Built on keras
-    #    
     def kerasGenerate(self):
-        image_generator = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
+        image_generator = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255, horizontal_flip=True,rotation_range=45,zoom_range=0.5,width_shift_range=.15,
+                    height_shift_range=.15)
         train_data_gen = image_generator.flow_from_directory(directory=str(self.data_dir),
                                                      batch_size=self.batch_size,
                                                      shuffle=True,
                                                      target_size=self.target_img_size,
-                                                     classes = list(self.CLASS_NAMES))
+                                                     classes = list(self.CLASS_NAMES),
+                                                     class_mode = "sparse")
         self.image_generator = train_data_gen
 
-    # Generate Image Dataset 
-    # Built on tensorflow
-    # 
     def tensorflowGenerate(self,cache,shuffle_buffer_size):
         
-        #return label list as bolean values represnted as True for correct class label and False as non correct class label
+
         def get_label(file_path):
             # convert the path to a list of path components
             parts = tf.strings.split(file_path, os.path.sep)
             # The second to last is the class-directory
             return parts[-2] == self.CLASS_NAMES
 
-        #make image trainable 
         def decode_img(img):
             # convert the compressed string to a 3D uint8 tensor
             img = tf.image.decode_jpeg(img, channels=3)
@@ -67,7 +67,6 @@ class ImageDataset:
             # resize the image to the desired size.
             return tf.image.resize(img, self.target_img_size)
 
-        #pair trainable image with boolean label list
         def process_path(file_path):
             label = get_label(file_path)
             # load the raw data from the file as a string
@@ -101,13 +100,31 @@ class ImageDataset:
         AUTOTUNE = tf.data.experimental.AUTOTUNE
         list_ds = tf.data.Dataset.list_files(str(self.data_dir/'*/*'))
         labeled_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE)
-        self.image_generator = prepare_for_training(labeled_ds,cache,shuffle_buffer_size)
+        self.image_generator = iter(prepare_for_training(labeled_ds,cache,shuffle_buffer_size))
+        
+    def timeit(self, steps=1000):
+        start = time.time()
+        it = iter(self.image_generator)
+        for i in range(steps):
+            batch = next(it)
+            if i%10 == 0:
+                print('.',end='')
+        print()
+        end = time.time()
 
-    # get next batch of img,label
+        duration = end-start
+        print("{} batches: {} s".format(steps, duration))
+        print("{:0.5f} Images/s".format(self.batch_size*steps/duration))
+
     def next(self):
         return next(self.image_generator)
     
-    #describe current dataset object
+    def get_data_gen(self):
+        return self.image_generator
+
+    def getImageCount(self):
+        return self.image_count
+
     def __str__(self):
         print("\n{:>20} : {}\n{:>20} : {}\n{:>20} : {}\n".format('Total Images',self.image_count,'Number of Classes',len(self.CLASS_NAMES),'Class Names',self.CLASS_NAMES))
         return " " 
